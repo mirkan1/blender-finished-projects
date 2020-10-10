@@ -1,0 +1,35 @@
+
+import os,sys, inspect, random, re
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.append(parentdir)
+
+#tower = bpy.data.objects['Eiffel tower sample']
+cube = bpy.data.objects[0] # first object
+random = random.randint(0, 10000000000000000000000) # random number to save file unique
+filepath = parentdir + "\\" + str(random) + "_example_" + ".svg"
+
+# import pdb;pdb.set_trace()
+bpy.ops.object.editmode_toggle()
+bpy.ops.object.editmode_toggle()
+bpy.ops.uv.smart_project() # bpy.ops.uv.project_from_view(camera_bounds=False, correct_aspect=True, scale_to_bounds=True) # Edit Mode > UV > Project from view(bounds)
+# gives error
+# RuntimeError: Operator bpy.ops.uv.project_from_view.poll() failed, context is incorrect
+bpy.ops.uv.export_layout(filepath=filepath, mode='SVG', size=(1024, 1024))
+
+
+#filepath="C:\\Users\\Raq\\Desktop\\stl shape\\Eiffel tower sample.svg"
+file = open(filepath , "r")
+file = file.read()
+rex = re.findall(r'(points=\"(\d+.\d+,\d+.\d+ | \d+.\d+,\d+.\d+)+)', file)
+#print(rex)
+for i in rex:
+    thriangle_values = i[0].split('points="')[1].split(" ")[:-1]
+    for j in thriangle_values:
+        print(j)
+        first_val = j.split(",")[0]
+        second_val = j.split(",")[1]
+        #third_val = j.split(",")[2]
+# Rex gives me bunch of groups of ('points="505.463,391.384 501.650,397.105 505.559,392.937 ', '505.559,392.937 ') like objects in an array
+# XXX Mantigini cizup bir araya getir, devamina bakarsin
+#

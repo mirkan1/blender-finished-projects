@@ -1,0 +1,384 @@
+data = {
+    "DNA_key": "G", # [C, G, T, A]
+    "Frame_limit": 1000, # How many frames you want
+    "Key_frames_reach_limit": 95, # The higher the value lesser key frames
+    # suggestion: 75 to 95 // 75 will create more key frames, 95 less
+    
+    "Plane": {
+        "number_of_particles": 1500, # either a number e.g 1000 or "r"
+        "fraction": 1.5,
+        "emission_lifetime": "DONT TOUCH", # I dont suggest using: it breaks the animation time to time
+        "movement_min_air_speed": "r",
+        },
+    "Sphere": {
+        "number_of_particles": "r", # either a number 1000 or "r"
+        "fraction": 1.5,
+        "emission_lifetime": "DONT TOUCH",
+        "movement_min_air_speed": "r",
+        },
+    "Sphere.001": {
+        "modifier_displace_strength": "r",
+        "material_mix_fac": "r",
+        "texture_size": "r",
+    },
+    "Sun": "ra",
+    "Cube": {
+        "fraction": 1.1, # the bigger fraction number the wider number change between two key frames
+        "modifier_displace_strength": "r",
+        "material_mix_fac": "r",
+        "texture_size": "r",
+    },
+    "Cube.001": {
+        "material_mix_fac": "r",
+        "decimate_ratio": "r",
+    }
+}
+
+import bpy, os, sys, math, random
+import bpy_types
+import numpy as np
+from random import randint
+obj_arr = {}
+
+
+filepath = bpy.data.filepath
+directory = os.path.dirname(filepath)
+sys.path.append(directory)
+
+from fastq import process
+
+def select(obj):
+    obj.select_set(True)
+    return {"FINISHED"}
+    
+def loc(obj, co="XYZ"):
+    # IF CO NOT GIVEN WILL RETURN A VECTOR
+    if co == "X":
+        return obj.location[0]
+    if co == "Y":
+        return obj.location[1]
+    if co == "Z":
+        return obj.location[3]
+    return obj.location
+
+def change_location(obj, loc1=(0,0,0), loc2=(0, -98, 128.57), frame1=1, frame2=300):
+    # X, Y, and Z location to set
+    obj.location = loc1 #0.0, 0.0, 0.0
+    
+    # Set the keyframe with that location, and which frame.
+    obj.keyframe_insert(data_path="location", frame=frame1)
+
+    # do it again!
+    obj.location = loc2 #0, -98, 128.57
+    
+    # setting it for frame 10
+    obj.keyframe_insert(data_path="location", frame=frame2)
+    return {"FINISHED"}
+
+def modifier_displace_str(obj, str1=1, str2=100, frame1=1, frame2=300, fraction=1.09):
+    disp = obj.modifiers["Displace"]
+    str = disp.strength
+    disp.strength = random.random() * (str + 2)
+    obj.keyframe_insert(data_path='modifiers["Displace"].strength', frame=frame2)
+    
+    str = disp.strength
+    disp.strength = random.random() * (str + 2)
+    #disp.strength = randint(round(str/fraction*100), round(str*fraction*100)) / 100
+    obj.keyframe_insert(data_path='modifiers["Displace"].strength', frame=frame2)
+    return {'FINISHED'}
+    
+def asign_material(ob):
+    # Get material
+    mat = bpy.data.materials.get("Material")
+    if mat is None:
+        # create material
+        mat = bpy.data.materials.new(name="Material")
+
+    # Assign it to object
+    if ob.data.materials:
+        # assign to 1st material slot
+        ob.data.materials[0] = mat
+    else:
+        # no slots
+        ob.data.materials.append(mat)
+    return mat
+    
+def change_rotation(obj, rot1=[0,0,0], rot2=[6.2962, math.pi, 1.57], frame1=1, frame2=300):
+    
+    bpy.context.object.rotation_euler[0] = rot1[0]
+    bpy.context.object.rotation_euler[1] = rot1[1]
+    bpy.context.object.rotation_euler[2] = rot1[2]
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame1)
+    
+    bpy.context.object.rotation_euler[0] = rot2[0]
+    bpy.context.object.rotation_euler[1] = rot2[1]
+    bpy.context.object.rotation_euler[2] = rot2[2]
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame2)
+    return {"FINISHED"}
+    
+def scale(obj, scale=[6.2962, math.pi, 1.57], frame1=1, frame2=300):
+    obj.keyframe_insert(data_path="scale", frame=frame1)
+    
+    bpy.context.object.scale[0] = scale[0]
+    bpy.context.object.scale[1] = scale[1]
+    bpy.context.object.scale[2] = scale[2]
+    obj.keyframe_insert(data_path="scale", frame=frame2)
+    return {"FINISHED"}
+
+def create_new_par_sys_and_use(obj):
+    obj.modifiers.new(obj.name, type='PARTICLE_SYSTEM')
+    bpy.ops.object.modifier_apply(modifier = obj.name)
+    return bpy.data.particles[obj.name].name
+
+def emissinion_lifetime_randomise(obj, particle_settings_name, frame1, frame2, fraction=1.09):
+    # XXX works fine
+    if type(obj.data) != bpy_types.Mesh:
+        return False
+    
+    particle_settings_name = 0 #XXX for this use only
+    ps = obj.particle_systems[particle_settings_name].settings
+    
+    # if data[obj.name]["emissinion_lifetime"] == "r":
+    ct = ps.lifetime
+    ps.lifetime = randint(round(ct/fraction), round(ct*fraction))
+    ps.keyframe_insert("lifetime", frame=frame1)
+    ct = ps.lifetime
+    ps.lifetime = randint(round(ct/fraction), round(ct*fraction))
+    ps.keyframe_insert("lifetime", frame=frame2) 
+    return {"FINISHED"}
+
+def displace_texture_size(obj, val1, val2, frame1, frame2, fraction=1.09):
+    # texture Displace'e bagli oldugu icin ondan cekmek gerekiyor
+        #XXX texture.preview #polonyalinin addonu icin lazim 
+        #XXX bpy.data.textures['Texture.001']...ImagePreview
+    disp = obj.modifiers["Displace"]
+    texture = disp.texture
+    
+    #size = texture.noise_scale
+    texture.noise_scale = val1 #randint(round(size/fraction*100), round(size*fraction*100)) / 100
+    texture.keyframe_insert(data_path="noise_scale", frame=frame1)
+
+    #size = texture.noise_scale
+    texture.noise_scale = val2 #randint(round(size/fraction*100), round(size*fraction*100)) / 100
+    texture.keyframe_insert(data_path="noise_scale", frame=frame2)
+    return {"FINISHED"}
+
+def movement_min_air_speed_randomise(obj, particle_settings_name, frame1, frame2):
+    if type(obj.data) != bpy_types.Mesh:
+        return False
+    
+    particle_settings_name = 0 #XXX for this use only
+    ps = obj.particle_systems[particle_settings_name].settings
+    
+    # if data[obj.name]["movement_min_air_speed"] == "r":
+    ps.boids.air_speed_min = randint(0,100)/100
+    ps.keyframe_insert("boids.air_speed_min", frame=frame1)
+    ps.boids.air_speed_min = randint(0,100)/100
+    ps.keyframe_insert("boids.air_speed_min", frame=frame2)
+    return {'FINISHED'}
+
+def file_check(obj, ext):
+    if data[obj.name][ext] == "r":
+        return True
+    else:
+        return False
+    
+def change_color_key_frame(obj, material, frame1, frame2, color1, color2):
+    # XXX works fine
+    base_color = material.node_tree.nodes["Principled BSDF"].inputs[0]
+    #subsurface = material.node_tree.nodes["Principled BSDF"].inputs[1]
+    #subsurface_rad = material.node_tree.nodes["Principled BSDF"].inputs[2] # .default_value[1,2,3]
+    
+    base_color.default_value = color1#(0.5, 0.12174, 0.0824045, 1)
+    #subsurface.default_value = 0.3
+    #subsurface_rad.default_value[1] = 100
+    base_color.keyframe_insert(data_path="default_value",frame=frame1)
+    
+    base_color.default_value = color2#(0.5, 0.327469, 0.000943781, 1)
+    #subsurface.default_value = 0.01
+    #subsurface_rad.default_value[1] = 50
+    base_color.keyframe_insert(data_path="default_value", frame=frame2)
+    return {"FINISHED"}
+
+def create_new_mat_and_use(obj):
+    material = bpy.data.materials.new(name=obj.name)
+    material.use_nodes = True
+    obj.active_material = material
+    return material
+
+def sun_color_keyframe_set(obj, color1, color2, frame1, frame2):
+    if type(obj.data) != bpy.types.SunLight:
+        return False
+    if data[obj.name] != "r":
+        return False
+    
+    obj.data.color = color1
+    obj.data.keyframe_insert("color", frame=frame1)
+    
+    obj.data.color = color2
+    obj.data.keyframe_insert("color", frame=frame2)
+    return {"FINISHED"}
+
+def mix_fac_randomise(obj, val1, val2, frame1, frame2):
+    #obj = obj_arr["Cube"]
+    mat = obj.data.materials[0] # guessing that first one is the active material
+    #for i in mat.node_tree.node:
+    #    if i.name == "Mix":
+    #        mix_node = mat.node_tree.nodes["Mix"]
+    mix_node = mat.node_tree.nodes["Mix"]
+    fac = mix_node.inputs["Fac"]
+    fac.default_value = val1
+    fac.keyframe_insert(data_path="default_value", frame=frame1)
+    fac.default_value = val2
+    fac.keyframe_insert(data_path="default_value", frame=frame2)
+    return {"FINISHED"}
+
+def keyframe_resetter(obj, data_path):
+    print(obj)
+    for num in range(0, data["Frame_limit"] + 1500):
+        try:
+            obj.keyframe_delete(data_path, frame=num)
+        except:
+            pass
+    return {"FINISHED"}
+
+def decimate_ratio_randomiser(obj, frame1, frame2):
+    dec = obj.modifiers["Decimate"]
+
+    dec.ratio = random.random() - 0.19
+    dec.keyframe_insert(data_path="ratio", frame=frame1)
+
+    dec.ratio = random.random() - 0.19
+    dec.keyframe_insert(data_path="ratio", frame=frame2)
+    return {"FINISHED"}
+    
+def number_of_particles_changer(obj, particle_settings_name, val):
+    ps = obj.particle_systems[particle_settings_name].settings
+    if val == "r":
+        ps.count = random.random() * ps.count + 500
+    else:
+        ps.count = val
+    return {"FINISHED"}
+      
+    
+def main(DNA, data):
+    # Plane
+    particle_settings_name = 0
+    obj = obj_arr["Plane"]
+    if data[obj.name]["number_of_particles"] == "r" or type(data[obj.name]["number_of_particles"]) == int:
+        number_of_particles_changer(obj, particle_settings_name, val=data[obj.name]["number_of_particles"])
+    if data[obj.name]["emission_lifetime"] == "r":
+        keyframe_resetter(obj.particle_systems[particle_settings_name].settings, data_path="lifetime")
+        first_frame = 0
+        for d in DNA:
+            emissinion_lifetime_randomise(obj=obj, particle_settings_name=obj.name, frame1=first_frame, frame2=d[0]["key_frame"], fraction=data[obj.name]["fraction"])
+            first_frame = d[0]["key_frame"]
+    if data[obj.name]["movement_min_air_speed"] == "r":
+        keyframe_resetter(obj.particle_systems[particle_settings_name].settings, data_path="air_speed_min")
+        first_frame = 0
+        for d in DNA:
+            movement_min_air_speed_randomise(obj=obj, particle_settings_name=obj.name, frame1=first_frame, frame2=d[0]["key_frame"])
+            first_frame = d[0]["key_frame"]
+    # Sphere
+    obj = obj_arr["Sphere"]
+    if data[obj.name]["number_of_particles"] == "r" or type(data[obj.name]["number_of_particles"]) == int:
+        number_of_particles_changer(obj, particle_settings_name, val=data[obj.name]["number_of_particles"])
+    if data[obj.name]["emission_lifetime"] == "r":
+        keyframe_resetter(obj.particle_systems[particle_settings_name].settings, data_path="lifetime")
+        first_frame = 0
+        for d in DNA:
+            emissinion_lifetime_randomise(obj=obj, particle_settings_name=obj.name, frame1=first_frame, frame2=d[0]["key_frame"], fraction=data[obj.name]["fraction"])
+            first_frame = d[0]["key_frame"]
+    if data[obj.name]["movement_min_air_speed"] == "r":
+        keyframe_resetter(obj.particle_systems[particle_settings_name].settings, data_path="air_speed_min")
+        first_frame = 0
+        for d in DNA:
+            movement_min_air_speed_randomise(obj=obj, particle_settings_name=obj.name, frame1=first_frame, frame2=d[0]["key_frame"])
+            first_frame = d[0]["key_frame"]
+    # Sun
+    obj = obj_arr["Sun"]
+    if data[obj.name] == "r":
+        keyframe_resetter(obj, data_path="color")
+        first_frame = 0
+        for d in DNA:
+            color1 = randint(0,100) / 100, randint(0,100) / 100, randint(0,400) / 100
+            color2 = randint(0,100) / 100, randint(0,100) / 100, randint(0,400) / 100
+            sun_color_keyframe_set(obj, color1=color1, color2=color2, frame1=first_frame, frame2=d[0]["key_frame"])
+            first_frame = d[0]["key_frame"]
+    # Cube
+    obj = obj_arr["Cube"]
+    if data[obj.name]["material_mix_fac"] == "r":
+        fac = obj.data.materials[0].node_tree.nodes["Mix"].inputs["Fac"]
+        keyframe_resetter(fac, data_path="default_value")
+        first_frame = 0
+        for d in DNA:
+            val1 = randint(0, 100) / 100
+            val2 = randint(0, 100) / 100
+            mix_fac_randomise(obj, val1=val1, val2=val2, frame1=first_frame, frame2=d[0]["key_frame"])
+            first_frame = d[0]["key_frame"]
+    if data[obj.name]["modifier_displace_strength"] == "r":
+        keyframe_resetter(obj, data_path='modifiers["Displace"].strength')
+        first_frame = 0
+        for d in DNA:
+            modifier_displace_str(obj, frame1=first_frame, frame2=d[0]["key_frame"], fraction=data[obj.name]["fraction"])
+            first_frame = d[0]["key_frame"]
+    if data[obj.name]["texture_size"] == "r":
+        keyframe_resetter(obj.modifiers["Displace"].texture, data_path="noise_scale")
+        first_frame = 0
+        for d in DNA:
+            displace_texture_size(obj, val1=random.random() * 2, val2=random.random() * 2, frame1=first_frame, frame2=d[0]["key_frame"], fraction=data[obj.name]["fraction"])
+            first_frame = d[0]["key_frame"]
+    # Sphere.001
+    obj = obj_arr["Sphere.001"]
+    if data[obj.name]["material_mix_fac"] == "r":
+        fac = obj.data.materials[0].node_tree.nodes["Mix"].inputs["Fac"]
+        keyframe_resetter(fac, data_path="default_value")
+        first_frame = 0
+        for d in DNA:
+            val1 = randint(0, 100) / 100
+            val2 = randint(0, 100) / 100
+            mix_fac_randomise(obj, val1=val1, val2=val2, frame1=first_frame, frame2=d[0]["key_frame"])
+            first_frame = d[0]["key_frame"]
+    if data[obj.name]["modifier_displace_strength"] == "r":
+        keyframe_resetter(obj, data_path='modifiers["Displace"].strength')
+        first_frame = 0
+        for d in DNA:
+            modifier_displace_str(obj, frame1=first_frame, frame2=d[0]["key_frame"], fraction=data[obj.name]["fraction"])
+            first_frame = d[0]["key_frame"]
+    if data[obj.name]["texture_size"] == "r":
+        keyframe_resetter(obj.modifiers["Displace"].texture, data_path="noise_scale")
+        first_frame = 0
+        for d in DNA:
+            displace_texture_size(obj, val1=random.random() * 2, val2=random.random() * 2, frame1=first_frame, frame2=d[0]["key_frame"], fraction=data[obj.name]["fraction"])
+            first_frame = d[0]["key_frame"]
+    # Cube.001
+    obj = obj_arr["Cube.001"]
+    if data[obj.name]["material_mix_fac"] == "r":
+        fac = obj.data.materials[0].node_tree.nodes["Mix"].inputs["Fac"]
+        keyframe_resetter(fac, data_path="default_value")
+        first_frame = 0
+        for d in DNA:
+            val1 = randint(0, 100) / 100
+            val2 = randint(0, 100) / 100
+            mix_fac_randomise(obj, val1=val1, val2=val2, frame1=first_frame, frame2=d[0]["key_frame"])
+            first_frame = d[0]["key_frame"]
+    if data[obj.name]["decimate_ratio"] == "r":
+        keyframe_resetter(obj.modifiers["Decimate"], data_path="ratio")
+        first_frame = 0
+        for d in DNA:
+            decimate_ratio_randomiser(obj, frame1=first_frame, frame2=d[0]["key_frame"])
+            first_frame = d[0]["key_frame"]
+            
+            
+for i in bpy.data.objects:
+    obj_arr[i.name] = i
+    
+DNA = process(
+    fn="Marco_R1_001.txt", 
+    dna_key=data["DNA_key"], 
+    dna_limit=data["Key_frames_reach_limit"], 
+    frame_limit=data["Frame_limit"]
+    )
+
+main(DNA, data)
+print("OVER >>>")
